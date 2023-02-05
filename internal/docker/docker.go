@@ -48,7 +48,7 @@ func copyFile(src, dst string) error {
 
 func (c dockerClient) buildImage(ctx context.Context, name, base string) error {
 	logger.Debug().Str("name", name).Str("base", base).Msg("building image")
-	dockerfileContents := fmt.Sprintf("FROM %s\nCOPY init /init\nENTRYPOINT [\"/init\"]", base)
+	dockerfileContents := fmt.Sprintf("FROM %s\nCOPY init /init\nRUN chmod +x /init\nENTRYPOINT [\"/init\"]", base)
 
 	contextDir, err := os.MkdirTemp("", "dockerbuild-*")
 	if err != nil {
@@ -109,7 +109,7 @@ func Run(stop chan struct{}, complete chan struct{}) {
 	ctx := context.Background()
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
-		logger.Fatal().Msg("could not create docker client")
+		logger.Fatal().Err(err).Msg("could not create docker client")
 	}
 	client := dockerClient{
 		cli: cli,
@@ -120,35 +120,28 @@ func Run(stop chan struct{}, complete chan struct{}) {
 		logger.Fatal().Err(err).Msg("building image")
 	}
 
-	reader, err := cli.ImagePull(ctx, "docker.io/library/alpine", types.ImagePullOptions{})
-	if err != nil {
-		logger.Fatal().Msg("could not pull image")
-	}
-	io.Copy(os.Stdout, reader)
-
 	res, err := cli.ContainerCreate(ctx, &container.Config{
-		Image: "alpine",
-		Cmd:   []string{"echo", "hello world"},
+		Image: "foo",
 	}, nil, nil, nil, "")
 	if err != nil {
-		logger.Fatal().Msg("could not create container")
+		logger.Fatal().Err(err).Msg("could not create container")
 	}
 	if err := cli.ContainerStart(ctx, res.ID, types.ContainerStartOptions{}); err != nil {
-		logger.Fatal().Msg("could not start container")
+		logger.Fatal().Err(err).Msg("could not start container")
 	}
 
 	statusCh, errCh := cli.ContainerWait(ctx, res.ID, container.WaitConditionNotRunning)
 	select {
 	case err := <-errCh:
 		if err != nil {
-			logger.Fatal().Msg("error running container")
+			logger.Fatal().Err(err).Msg("error running container")
 		}
 	case <-statusCh:
 	}
 
 	out, err := cli.ContainerLogs(ctx, res.ID, types.ContainerLogsOptions{ShowStdout: true})
 	if err != nil {
-		logger.Fatal().Msg("could not get container logs")
+		logger.Fatal().Err(err).Msg("could not get container logs")
 	}
 
 	stdcopy.StdCopy(os.Stdout, os.Stderr, out)
