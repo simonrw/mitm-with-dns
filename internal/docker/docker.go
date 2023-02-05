@@ -127,7 +127,6 @@ func (c dockerClient) buildImage(ctx context.Context, name, base string) error {
 
 	res, err := c.cli.ImageBuild(ctx, buildCtx, types.ImageBuildOptions{
 		Tags:       []string{name},
-		PullParent: true,
 		Dockerfile: "Dockerfile",
 	})
 	if err != nil {
@@ -144,7 +143,7 @@ func (c dockerClient) Close() {
 	c.cli.Close()
 }
 
-func Run(stop chan struct{}, complete chan struct{}) {
+func Run(baseName string, stop chan struct{}, complete chan struct{}) {
 	logger.Info().Msg("running docker container")
 
 	ctx := context.Background()
@@ -157,7 +156,7 @@ func Run(stop chan struct{}, complete chan struct{}) {
 	}
 	defer client.Close()
 
-	if err := client.buildImage(ctx, "foo", "alpine"); err != nil {
+	if err := client.buildImage(ctx, "foo", baseName); err != nil {
 		logger.Fatal().Err(err).Msg("building image")
 	}
 

@@ -49,7 +49,7 @@ func RunServer(ready chan struct{}, stop chan struct{}, complete chan struct{}) 
 	handler := &dnsHandler{}
 
 	server := &dns.Server{
-		Addr:    ":8053",
+		Addr:    "0.0.0.0:8053",
 		Net:     "udp",
 		Handler: handler,
 	}

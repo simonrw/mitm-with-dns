@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"os"
 	"os/signal"
 	"syscall"
@@ -18,6 +19,13 @@ func init() {
 }
 
 func main() {
+	imageNameFlag := flag.String("image", "", "name of the user image")
+	flag.Parse()
+
+	if *imageNameFlag == "" {
+		logger.Fatal().Msg("no image name given")
+	}
+
 	// set up logging
 	zerolog.SetGlobalLevel(zerolog.DebugLevel)
 
@@ -32,7 +40,7 @@ func main() {
 
 	logger.Info().Msg("running docker container")
 	dockerComplete := make(chan struct{})
-	go docker.Run(stop, dockerComplete)
+	go docker.Run(*imageNameFlag, stop, dockerComplete)
 
 	// handle ctrl-c
 	sig := make(chan os.Signal)
