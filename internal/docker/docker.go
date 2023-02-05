@@ -11,6 +11,10 @@ func init() {
 	logger = log.With().Str("module", "docker").Logger()
 }
 
-func Run() {
-	logger.Info().Msg("Running docker container")
+func Run(stop chan struct{}, complete chan struct{}) {
+	logger.Info().Msg("running docker container")
+	logger.Info().Msg("waiting for shutdown signal")
+	<-stop
+	logger.Info().Msg("shutting down docker container")
+	complete <- struct{}{}
 }
