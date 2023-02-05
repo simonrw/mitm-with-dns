@@ -7,12 +7,17 @@
     flake-utils.lib.eachDefaultSystem (system:
       let pkgs = nixpkgs.legacyPackages.${system}; in
       {
-        devShells.default = pkgs.mkShellNoCC {
+        devShells.default = pkgs.mkShell {
           buildInputs = with pkgs; [
             go
             gopls
             delve
+            lldb
+            llvm
           ];
+
+          hardeningDisable = [ "fortify" ];
+          LLVM_SYMBOLIZER_PATH = "${pkgs.llvm}/bin/llvm-symbolizer";
         };
       }
     );
