@@ -1,6 +1,8 @@
 package dns
 
 import (
+	"net"
+
 	"github.com/miekg/dns"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -12,28 +14,33 @@ func init() {
 	logger = log.With().Str("module", "dns").Logger()
 }
 
-type server struct {
-}
-
-func handleRedirect(w dns.ResponseWriter, r *dns.Msg) {
-}
-
-func serve(net, nanme, secret string, soreuseport bool) {
-	server := &dns.Server{
-		Addr:       ":8053",
-		Net:        net,
-		TsigSecret: nil,
-		ReusePort:  soreuseport,
-	}
-	if err := server.ListenAndServe(); err != nil {
-		logger.Fatal().Msg("failed to set up server")
-	}
-}
-
-type dnsHandler struct {
-}
+type dnsHandler struct{}
 
 func (h *dnsHandler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
+	m := new(dns.Msg)
+	m.Id = r.Id
+	q := r.Question[0]
+	switch q.Qtype {
+	case dns.TypeA:
+		logger.Info().Msg("got A record query type")
+		a := net.ParseIP("7.7.7.7")
+		rr := &dns.A{
+			Hdr: dns.RR_Header{
+				Name:   q.Name,
+				Rrtype: dns.TypeA,
+				Class:  dns.ClassINET,
+				Ttl:    1500,
+			},
+			A: a,
+		}
+		m.Answer = append(m.Answer, rr)
+		logger.Info().Any("response", m).Msg("returning response")
+		w.WriteMsg(m)
+	default:
+		log.Warn().Uint16("qtype", r.Question[0].Qtype).Msg("unhandled query type")
+	}
+
+	// return error
 }
 
 func RunServer(ready chan struct{}, stop chan struct{}, complete chan struct{}) {
@@ -42,6 +49,7 @@ func RunServer(ready chan struct{}, stop chan struct{}, complete chan struct{}) 
 	handler := &dnsHandler{}
 
 	server := &dns.Server{
+		Addr:    ":8053",
 		Net:     "udp",
 		Handler: handler,
 	}
