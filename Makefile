@@ -8,5 +8,8 @@ init: cmd/init/main.go Makefile
 
 .PHONY: run
 
-run: transparent-endpoints
+run: transparent-endpoints init _wildcard.amazonaws.com.pem
 	./transparent-endpoints
+
+_wildcard.amazonaws.com.pem:
+	mkcert '*.amazonaws.com'

@@ -7,17 +7,18 @@
     flake-utils.lib.eachDefaultSystem (system:
       let pkgs = nixpkgs.legacyPackages.${system}; in
       {
-        devShells.default = pkgs.mkShell {
+        devShells.default = pkgs.mkShellNoCC {
           buildInputs = with pkgs; [
             go
             gopls
             delve
             lldb
             llvm
+            mkcert
+            gnumake
           ];
 
-          hardeningDisable = [ "fortify" ];
-          LLVM_SYMBOLIZER_PATH = "${pkgs.llvm}/bin/llvm-symbolizer";
+          CAROOT = "./ca";
         };
       }
     );

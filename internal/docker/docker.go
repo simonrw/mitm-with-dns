@@ -48,7 +48,12 @@ func copyFile(src, dst string) error {
 
 func (c dockerClient) buildImage(ctx context.Context, name, base string) error {
 	logger.Debug().Str("name", name).Str("base", base).Msg("building image")
-	dockerfileContents := fmt.Sprintf("FROM %s\nCOPY init /init\nRUN chmod +x /init\nENTRYPOINT [\"/init\"]", base)
+	dockerfileContents := fmt.Sprintf(`
+	FROM %s
+	COPY init /init
+	RUN chmod +x /init
+	ENTRYPOINT ["/init"]
+	`, base)
 
 	contextDir, err := os.MkdirTemp("", "dockerbuild-*")
 	if err != nil {
