@@ -8,6 +8,7 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
+	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -39,8 +40,28 @@ func Run(stop chan struct{}, complete chan struct{}) {
 		Cmd:   []string{"echo", "hello world"},
 	}, nil, nil, nil, "")
 	if err != nil {
-		logger.Fatal().Msg("could not run container")
+		logger.Fatal().Msg("could not create container")
 	}
+	if err := cli.ContainerStart(ctx, res.ID, types.ContainerStartOptions{}); err != nil {
+		logger.Fatal().Msg("could not start container")
+	}
+
+	statusCh, errCh := cli.ContainerWait(ctx, res.ID, container.WaitConditionNotRunning)
+	select {
+	case err := <-errCh:
+		if err != nil {
+			logger.Fatal().Msg("error running container")
+		}
+	case <-statusCh:
+	}
+
+	out, err := cli.ContainerLogs(ctx, res.ID, types.ContainerLogsOptions{ShowStdout: true})
+	if err != nil {
+		logger.Fatal().Msg("could not get container logs")
+	}
+
+	stdcopy.StdCopy(os.Stdout, os.Stderr, out)
+	logger.Info().Msg("container run complete")
 
 	logger.Info().Msg("waiting for shutdown signal")
 	<-stop
