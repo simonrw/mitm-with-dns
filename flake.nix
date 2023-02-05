@@ -7,13 +7,10 @@
     flake-utils.lib.eachDefaultSystem (system:
       let pkgs = nixpkgs.legacyPackages.${system}; in
       {
-        packages = rec {
-          hello = pkgs.hello;
-          default = hello;
-        };
-        apps = rec {
-          hello = flake-utils.lib.mkApp { drv = self.packages.${system}.hello; };
-          default = hello;
+        devShells.default = pkgs.mkShellNoCC {
+          buildInputs = with pkgs; [
+            go
+          ];
         };
       }
     );
