@@ -1,3 +1,5 @@
+TEST_IMAGE_NAME := srwalker101/mitm-with-dns
+
 all: transparent-endpoints init
 
 transparent-endpoints: $(wildcard cmd/transparent-endpoints/*.go internal/dns/*.go internal/docker/*.go) init Makefile
@@ -13,3 +15,7 @@ run: transparent-endpoints init _wildcard.amazonaws.com.pem
 
 _wildcard.amazonaws.com.pem:
 	mkcert '*.amazonaws.com'
+
+.PHONY: dockerbuild
+dockerbuild:
+	$(MAKE) -C userimage build IMAGENAME=$(TEST_IMAGE_NAME)
