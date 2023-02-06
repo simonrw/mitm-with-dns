@@ -71,7 +71,7 @@ func (c dockerClient) buildImage(ctx context.Context, name, base string) error {
 	RUN chmod +x /init
 	RUN mkdir -p /customcerts/ca
 	COPY *.pem /customcerts/
-	COPY ca/*.pem customcerts/ca/
+	COPY ca/*.pem /customcerts/ca/
 	ENTRYPOINT ["/init"]
 	`, base)
 
