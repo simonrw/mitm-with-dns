@@ -2,6 +2,7 @@ package dns
 
 import (
 	"net"
+	"sync"
 
 	"github.com/miekg/dns"
 	"github.com/rs/zerolog"
@@ -69,7 +70,9 @@ func (h *dnsHandler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	// return error
 }
 
-func RunServer(ready chan struct{}, ipAddresses []net.IP, stop chan struct{}, complete chan struct{}) {
+func RunServer(ready *sync.WaitGroup, ipAddresses []net.IP, stop chan struct{}, complete *sync.WaitGroup) {
+	complete.Add(1)
+	defer complete.Done()
 	logger.Info().Msg("running DNS server")
 
 	handler := &dnsHandler{ipAddresses}
@@ -83,10 +86,9 @@ func RunServer(ready chan struct{}, ipAddresses []net.IP, stop chan struct{}, co
 	defer server.Shutdown()
 
 	logger.Info().Msg("DNS server ready")
-	ready <- struct{}{}
+	ready.Done()
 
 	logger.Info().Msg("waiting for shutdown signal")
 	<-stop
 	logger.Info().Msg("shutdown signal received")
-	complete <- struct{}{}
 }

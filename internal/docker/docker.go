@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -141,7 +142,7 @@ func (c dockerClient) buildImage(ctx context.Context, name, base string) error {
 	return nil
 }
 
-func (c dockerClient) runContainer(ctx context.Context, image, name string, stop chan struct{}, complete chan struct{}) error {
+func (c dockerClient) runContainer(ctx context.Context, image, name string, stop chan struct{}) error {
 	is := []string{}
 	for _, addr := range c.ipAddresses {
 		if addr.IsLoopback() {
@@ -174,7 +175,6 @@ func (c dockerClient) runContainer(ctx context.Context, image, name string, stop
 	select {
 	case <-stop:
 		containerRemove()
-		complete <- struct{}{}
 		return nil
 	case err := <-errCh:
 		if err != nil {
@@ -199,7 +199,9 @@ func (c dockerClient) Close() {
 	c.cli.Close()
 }
 
-func Run(baseName string, ipAddresses []net.IP, stop chan struct{}, complete chan struct{}) {
+func Run(baseName string, ipAddresses []net.IP, stop chan struct{}, complete *sync.WaitGroup) {
+	complete.Add(1)
+	defer complete.Done()
 	logger.Info().Msg("running docker container")
 
 	ctx := context.Background()
@@ -218,12 +220,11 @@ func Run(baseName string, ipAddresses []net.IP, stop chan struct{}, complete cha
 	if err := client.buildImage(ctx, imageName, baseName); err != nil {
 		logger.Fatal().Err(err).Msg("building image")
 	}
-	if err := client.runContainer(ctx, imageName, containerName, stop, complete); err != nil {
+	if err := client.runContainer(ctx, imageName, containerName, stop); err != nil {
 		logger.Fatal().Err(err).Msg("running container")
 	}
 
 	logger.Info().Msg("waiting for shutdown signal")
 	<-stop
 	logger.Info().Msg("shutting down docker container")
-	complete <- struct{}{}
 }

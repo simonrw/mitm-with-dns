@@ -6,12 +6,14 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/simonrw/transparent-endpoints/internal/dns"
 	"github.com/simonrw/transparent-endpoints/internal/docker"
+	"github.com/simonrw/transparent-endpoints/internal/http"
 )
 
 var logger zerolog.Logger
@@ -69,18 +71,24 @@ func main() {
 	// set up logging
 	zerolog.SetGlobalLevel(zerolog.DebugLevel)
 
-	ready := make(chan struct{}, 1)
+	var ready sync.WaitGroup
+
 	logger.Info().Msg("running DNS server in the background")
 
 	stop := make(chan struct{})
-	dnsComplete := make(chan struct{})
-	go dns.RunServer(ready, ipAddresses, stop, dnsComplete)
-	logger.Info().Msg("waiting for DNS server to be ready")
-	<-ready
+	var finished sync.WaitGroup
+	ready.Add(1)
+	go dns.RunServer(&ready, ipAddresses, stop, &finished)
+
+	// start http server
+	ready.Add(1)
+	go http.RunServer(&ready, stop, &finished)
+
+	logger.Info().Msg("waiting for servers to be ready")
+	ready.Wait()
 
 	logger.Info().Msg("running docker container")
-	dockerComplete := make(chan struct{})
-	go docker.Run(*imageNameFlag, ipAddresses, stop, dockerComplete)
+	go docker.Run(*imageNameFlag, ipAddresses, stop, &finished)
 
 	// handle ctrl-c
 	sig := make(chan os.Signal)
@@ -88,13 +96,12 @@ func main() {
 
 	<-sig
 	logger.Info().Msg("shutting down goroutines")
-	for i := 0; i < 2; i++ {
+	for i := 0; i < 4; i++ {
 		stop <- struct{}{}
 	}
 
 	// wait for goroutines to cleanup
-	<-dnsComplete
-	<-dockerComplete
+	finished.Wait()
 	logger.Info().Msg("ending main goroutine")
 
 }
