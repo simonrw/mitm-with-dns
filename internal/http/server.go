@@ -19,6 +19,8 @@ func init() {
 func createRouter() *http.ServeMux {
 	router := http.NewServeMux()
 	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		logger := logger.With().Str("path", r.URL.Path).Logger()
+		logger.Debug().Msg("got request")
 		fmt.Fprintf(w, "ok")
 	})
 	return router
