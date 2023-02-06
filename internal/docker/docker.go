@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 
@@ -24,7 +25,8 @@ func init() {
 }
 
 type dockerClient struct {
-	cli *client.Client
+	ipAddresses []net.IP
+	cli         *client.Client
 }
 
 func copyFile(src, dst string) error {
@@ -140,9 +142,16 @@ func (c dockerClient) buildImage(ctx context.Context, name, base string) error {
 }
 
 func (c dockerClient) runContainer(ctx context.Context, image, name string, stop chan struct{}, complete chan struct{}) error {
+	is := []string{}
+	for _, addr := range c.ipAddresses {
+		is = append(is, addr.String())
+	}
+	hostCfg := &container.HostConfig{
+		DNS: is,
+	}
 	res, err := c.cli.ContainerCreate(ctx, &container.Config{
 		Image: image,
-	}, nil, nil, nil, name)
+	}, hostCfg, nil, nil, name)
 	if err != nil {
 		logger.Fatal().Err(err).Msg("could not create container")
 	}
@@ -187,7 +196,7 @@ func (c dockerClient) Close() {
 	c.cli.Close()
 }
 
-func Run(baseName string, stop chan struct{}, complete chan struct{}) {
+func Run(baseName string, ipAddresses []net.IP, stop chan struct{}, complete chan struct{}) {
 	logger.Info().Msg("running docker container")
 
 	ctx := context.Background()
@@ -196,7 +205,8 @@ func Run(baseName string, stop chan struct{}, complete chan struct{}) {
 		logger.Fatal().Err(err).Msg("could not create docker client")
 	}
 	client := dockerClient{
-		cli: cli,
+		ipAddresses: ipAddresses,
+		cli:         cli,
 	}
 	defer client.Close()
 

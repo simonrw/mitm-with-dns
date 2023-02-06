@@ -80,7 +80,7 @@ func main() {
 
 	logger.Info().Msg("running docker container")
 	dockerComplete := make(chan struct{})
-	go docker.Run(*imageNameFlag, stop, dockerComplete)
+	go docker.Run(*imageNameFlag, ipAddresses, stop, dockerComplete)
 
 	// handle ctrl-c
 	sig := make(chan os.Signal)
