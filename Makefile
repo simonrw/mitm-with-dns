@@ -20,7 +20,7 @@ run: transparent-endpoints init _wildcard.amazonaws.com+1.pem dockerbuild
 	./transparent-endpoints -image $(TEST_IMAGE_NAME)
 
 .PHONY: dockerrun
-dockerrun: build
+dockerrun: _wildcard.amazonaws.com+1.pem build
 	docker run --rm -it --name ls -v /var/run/docker.sock:/var/run/docker.sock $(LS_IMAGE_NAME) -image $(TEST_IMAGE_NAME)
 
 _wildcard.amazonaws.com+1.pem:
