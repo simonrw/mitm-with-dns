@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"sync"
 
@@ -15,16 +16,39 @@ func init() {
 	logger = log.With().Str("module", "http").Logger()
 }
 
+func createRouter() *http.ServeMux {
+	router := http.NewServeMux()
+	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "ok")
+	})
+	return router
+}
+
 func RunServer(ready *sync.WaitGroup, stop chan struct{}, finished *sync.WaitGroup) {
 	logger.Info().Msg("running HTTP server")
 	finished.Add(1)
 	defer finished.Done()
 
-	server := &http.Server{
-		Addr: "0.0.0.0:80",
+	router := createRouter()
+	httpServer := &http.Server{
+		Addr:    "0.0.0.0:80",
+		Handler: router,
 	}
-	go server.ListenAndServe()
-	defer server.Shutdown(context.TODO())
+	httpsServer := &http.Server{
+		Addr:    "0.0.0.0:443",
+		Handler: router,
+	}
+	go func() {
+		if err := httpServer.ListenAndServe(); err != nil {
+			logger.Warn().Err(err).Msg("failed to start HTTP listener")
+		}
+	}()
+	go func() {
+		if err := httpsServer.ListenAndServeTLS("./_wildcard.amazonaws.com.pem", "./_wildcard.amazonaws.com-key.pem"); err != nil {
+			logger.Warn().Err(err).Msg("failed to start HTTPS listener")
+		}
+	}()
+	defer httpServer.Shutdown(context.TODO())
 
 	logger.Info().Msg("http server running")
 	ready.Done()
