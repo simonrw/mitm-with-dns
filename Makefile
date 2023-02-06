@@ -21,7 +21,7 @@ run: transparent-endpoints init _wildcard.amazonaws.com.pem dockerbuild
 
 .PHONY: dockerrun
 dockerrun: build
-	docker run --rm -it -v /var/run/docker.sock:/var/run/docker.sock $(LS_IMAGE_NAME) -image $(TEST_IMAGE_NAME)
+	docker run --rm -it --name ls -v /var/run/docker.sock:/var/run/docker.sock $(LS_IMAGE_NAME) -image $(TEST_IMAGE_NAME)
 
 _wildcard.amazonaws.com.pem:
 	mkcert '*.amazonaws.com'

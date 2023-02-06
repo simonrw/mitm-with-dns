@@ -144,6 +144,9 @@ func (c dockerClient) buildImage(ctx context.Context, name, base string) error {
 func (c dockerClient) runContainer(ctx context.Context, image, name string, stop chan struct{}, complete chan struct{}) error {
 	is := []string{}
 	for _, addr := range c.ipAddresses {
+		if addr.IsLoopback() {
+			continue
+		}
 		is = append(is, addr.String())
 	}
 	hostCfg := &container.HostConfig{

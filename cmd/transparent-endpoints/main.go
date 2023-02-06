@@ -74,7 +74,7 @@ func main() {
 
 	stop := make(chan struct{})
 	dnsComplete := make(chan struct{})
-	go dns.RunServer(ready, stop, dnsComplete)
+	go dns.RunServer(ready, ipAddresses, stop, dnsComplete)
 	logger.Info().Msg("waiting for DNS server to be ready")
 	<-ready
 

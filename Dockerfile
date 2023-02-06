@@ -13,7 +13,7 @@ COPY cmd ./cmd
 COPY internal ./internal
 COPY Makefile ./
 
-RUN make
+RUN make -j
 
 FROM alpine
 
