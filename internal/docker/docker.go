@@ -159,11 +159,22 @@ func (c dockerClient) runContainer(ctx context.Context, image, name string, stop
 	if err != nil {
 		logger.Fatal().Err(err).Msg("could not create container")
 	}
+	logger := logger.With().Str("container-id", res.ID).Logger()
+
 	if err := c.cli.ContainerStart(ctx, res.ID, types.ContainerStartOptions{}); err != nil {
 		logger.Fatal().Err(err).Msg("could not start container")
 	}
+	logger.Debug().Msg("started container")
 
 	containerRemove := func() {
+		logger.Debug().Msg("stopping container")
+		timeout := 1
+		if err := c.cli.ContainerStop(ctx, res.ID, container.StopOptions{
+			Timeout: &timeout,
+		}); err != nil {
+			logger.Warn().Err(err).Msg("failed to stop container")
+		}
+
 		logger.Info().Msg("removing container")
 		// remove the container
 		if err := c.cli.ContainerRemove(ctx, res.ID, types.ContainerRemoveOptions{Force: true}); err != nil {
@@ -171,9 +182,12 @@ func (c dockerClient) runContainer(ctx context.Context, image, name string, stop
 		}
 	}
 
+	logger.Debug().Msg("waiting for container to finish")
 	statusCh, errCh := c.cli.ContainerWait(ctx, res.ID, container.WaitConditionNotRunning)
+	logger.Debug().Msg("wait call finished")
 	select {
 	case <-stop:
+		logger.Debug().Msg("stop command received")
 		out, err := c.cli.ContainerLogs(ctx, res.ID, types.ContainerLogsOptions{ShowStdout: true, ShowStderr: true})
 		if err != nil {
 			logger.Warn().Err(err).Msg("could not get container logs")
@@ -183,18 +197,19 @@ func (c dockerClient) runContainer(ctx context.Context, image, name string, stop
 		containerRemove()
 		return nil
 	case err := <-errCh:
+		logger.Warn().Err(err).Msg("error received from container")
 		if err != nil {
 			containerRemove()
 			logger.Fatal().Err(err).Msg("error running container")
 		}
 	case <-statusCh:
+		logger.Debug().Msg("conatiner stopped by itself")
 		out, err := c.cli.ContainerLogs(ctx, res.ID, types.ContainerLogsOptions{ShowStdout: true})
 		if err != nil {
 			logger.Warn().Err(err).Msg("could not get container logs")
 		} else {
 			stdcopy.StdCopy(os.Stdout, os.Stderr, out)
 		}
-		containerRemove()
 	}
 
 	logger.Info().Msg("container run complete")

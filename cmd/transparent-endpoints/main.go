@@ -96,11 +96,12 @@ func main() {
 
 	<-sig
 	logger.Info().Msg("shutting down goroutines")
-	for i := 0; i < 8; i++ {
+	for i := 0; i < 3; i++ {
 		stop <- struct{}{}
 	}
 
 	// wait for goroutines to cleanup
+	logger.Info().Msg("waiting for goroutines to shut down")
 	finished.Wait()
 	logger.Info().Msg("ending main goroutine")
 
