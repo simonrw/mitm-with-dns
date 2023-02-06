@@ -20,20 +20,18 @@ func splitLines(s string) []string {
 	return lines
 }
 
-func main() {
-	fmt.Println("Init process")
-
+func setupCerts() error {
 	// copy the ca certificate
 	// TODO: non-platform specific
 	certs, err := ioutil.ReadFile("/etc/ssl/certs/ca-certificates.crt")
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("reading existing certs: %w", err)
 	}
 	certLines := splitLines(string(certs))
 
 	rootCa, err := ioutil.ReadFile("/customcerts/ca/rootCA.pem")
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("reading mitm cert: %w", err)
 	}
 	caLines := splitLines(string(rootCa))
 
@@ -48,12 +46,28 @@ func main() {
 	// clobber output file
 	f, err := os.Create("/etc/ssl/certs/ca-certificates.crt")
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("creating certificate file %w", err)
 	}
 	if _, err := f.WriteString(strings.Join(allLines, "\n")); err != nil {
-		panic(err)
+		return fmt.Errorf("writing certificate contents: %w", err)
 	}
 	fmt.Println("certificates updated")
 
+	return nil
+}
+
+func run() error {
+	fmt.Println("Init process")
+	if err := setupCerts(); err != nil {
+		return fmt.Errorf("setting up certificates: %w", err)
+	}
+
 	time.Sleep(86400 * time.Second)
+	return nil
+}
+
+func main() {
+	if err := run(); err != nil {
+		panic(err)
+	}
 }
