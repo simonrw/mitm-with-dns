@@ -139,6 +139,50 @@ func (c dockerClient) buildImage(ctx context.Context, name, base string) error {
 	return nil
 }
 
+func (c dockerClient) runContainer(ctx context.Context, image, name string, stop chan struct{}, complete chan struct{}) error {
+	res, err := c.cli.ContainerCreate(ctx, &container.Config{
+		Image: image,
+	}, nil, nil, nil, name)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("could not create container")
+	}
+	if err := c.cli.ContainerStart(ctx, res.ID, types.ContainerStartOptions{}); err != nil {
+		logger.Fatal().Err(err).Msg("could not start container")
+	}
+
+	containerRemove := func() {
+		logger.Info().Msg("removing container")
+		// remove the container
+		if err := c.cli.ContainerRemove(ctx, res.ID, types.ContainerRemoveOptions{Force: true}); err != nil {
+			logger.Warn().Err(err).Msg("failed to remove container")
+		}
+	}
+
+	statusCh, errCh := c.cli.ContainerWait(ctx, res.ID, container.WaitConditionNotRunning)
+	select {
+	case <-stop:
+		containerRemove()
+		complete <- struct{}{}
+		return nil
+	case err := <-errCh:
+		if err != nil {
+			containerRemove()
+			logger.Fatal().Err(err).Msg("error running container")
+		}
+	case <-statusCh:
+		containerRemove()
+	}
+
+	out, err := c.cli.ContainerLogs(ctx, res.ID, types.ContainerLogsOptions{ShowStdout: true})
+	if err != nil {
+		logger.Fatal().Err(err).Msg("could not get container logs")
+	}
+
+	stdcopy.StdCopy(os.Stdout, os.Stderr, out)
+	logger.Info().Msg("container run complete")
+	return nil
+}
+
 func (c dockerClient) Close() {
 	c.cli.Close()
 }
@@ -156,50 +200,14 @@ func Run(baseName string, stop chan struct{}, complete chan struct{}) {
 	}
 	defer client.Close()
 
-	if err := client.buildImage(ctx, "foo", baseName); err != nil {
+	imageName := "foo"
+	containerName := "container"
+	if err := client.buildImage(ctx, imageName, baseName); err != nil {
 		logger.Fatal().Err(err).Msg("building image")
 	}
-
-	res, err := cli.ContainerCreate(ctx, &container.Config{
-		Image: "foo",
-	}, nil, nil, nil, "container")
-	if err != nil {
-		logger.Fatal().Err(err).Msg("could not create container")
+	if err := client.runContainer(ctx, imageName, containerName, stop, complete); err != nil {
+		logger.Fatal().Err(err).Msg("running container")
 	}
-	if err := cli.ContainerStart(ctx, res.ID, types.ContainerStartOptions{}); err != nil {
-		logger.Fatal().Err(err).Msg("could not start container")
-	}
-
-	containerRemove := func() {
-		logger.Info().Msg("removing container")
-		// remove the container
-		if err := cli.ContainerRemove(ctx, res.ID, types.ContainerRemoveOptions{Force: true}); err != nil {
-			logger.Warn().Err(err).Msg("failed to remove container")
-		}
-	}
-
-	statusCh, errCh := cli.ContainerWait(ctx, res.ID, container.WaitConditionNotRunning)
-	select {
-	case <-stop:
-		containerRemove()
-		complete <- struct{}{}
-		return
-	case err := <-errCh:
-		if err != nil {
-			containerRemove()
-			logger.Fatal().Err(err).Msg("error running container")
-		}
-	case <-statusCh:
-		containerRemove()
-	}
-
-	out, err := cli.ContainerLogs(ctx, res.ID, types.ContainerLogsOptions{ShowStdout: true})
-	if err != nil {
-		logger.Fatal().Err(err).Msg("could not get container logs")
-	}
-
-	stdcopy.StdCopy(os.Stdout, os.Stderr, out)
-	logger.Info().Msg("container run complete")
 
 	logger.Info().Msg("waiting for shutdown signal")
 	<-stop
