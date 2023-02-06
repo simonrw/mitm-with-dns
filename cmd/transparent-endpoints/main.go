@@ -2,6 +2,8 @@ package main
 
 import (
 	"flag"
+	"fmt"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
@@ -18,6 +20,38 @@ func init() {
 	logger = log.With().Str("module", "main").Logger()
 }
 
+func getIPAddresses() ([]net.IP, error) {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return nil, fmt.Errorf("getting interfaces: %w", err)
+	}
+	var res []net.IP
+	for _, i := range ifaces {
+		addrs, err := i.Addrs()
+		if err != nil {
+			continue
+		}
+
+		for _, addr := range addrs {
+			var ip net.IP
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ip = v.IP
+			case *net.IPAddr:
+				ip = v.IP
+			default:
+				continue
+			}
+
+			logger.Debug().Any("ip address", ip).Any("interface", i).Msg("found ip address")
+			res = append(res, ip)
+
+		}
+	}
+
+	return res, nil
+}
+
 func main() {
 	imageNameFlag := flag.String("image", "", "name of the user image")
 	flag.Parse()
@@ -25,6 +59,12 @@ func main() {
 	if *imageNameFlag == "" {
 		logger.Fatal().Msg("no image name given")
 	}
+
+	ipAddresses, err := getIPAddresses()
+	if err != nil {
+		logger.Fatal().Err(err).Msg("getting IP addresses")
+	}
+	logger.Info().Any("ip addresses", ipAddresses).Msg("got IP addresses")
 
 	// set up logging
 	zerolog.SetGlobalLevel(zerolog.DebugLevel)

@@ -1,3 +1,4 @@
+LS_IMAGE_NAME := ls
 TEST_IMAGE_NAME := mitm-with-dns
 __UNAME := $(shell uname -m)
 
@@ -25,3 +26,6 @@ _wildcard.amazonaws.com.pem:
 .PHONY: dockerbuild
 dockerbuild:
 	$(MAKE) -C userimage build IMAGENAME=$(TEST_IMAGE_NAME)
+
+build:
+	docker build -t $(LS_IMAGE_NAME) .
