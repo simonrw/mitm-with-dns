@@ -106,13 +106,13 @@ func (c dockerClient) buildImage(ctx context.Context, name, base string) error {
 
 	// copy the certificates
 	if err := copyFiles([]string{
-		"./_wildcard.amazonaws.com-key.pem",
-		"./_wildcard.amazonaws.com.pem",
+		"./_wildcard.amazonaws.com+1-key.pem",
+		"./_wildcard.amazonaws.com+1.pem",
 		"./ca/rootCA-key.pem",
 		"./ca/rootCA.pem",
 	}, []string{
-		filepath.Join(contextDir, "_wildcard.amazonaws.com-key.pem"),
-		filepath.Join(contextDir, "_wildcard.amazonaws.com.pem"),
+		filepath.Join(contextDir, "_wildcard.amazonaws.com+1-key.pem"),
+		filepath.Join(contextDir, "_wildcard.amazonaws.com+1.pem"),
 		filepath.Join(contextDir, "ca", "rootCA-key.pem"),
 		filepath.Join(contextDir, "ca", "rootCA.pem"),
 	}); err != nil {
