@@ -5,9 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
+	"os/exec"
 	"strings"
-	"time"
 )
 
 func splitLines(s string) []string {
@@ -83,11 +84,29 @@ func setupCerts() error {
 	return nil
 }
 
+func runChild(cmd []string) error {
+	child := exec.Command(cmd[0], cmd[1:]...)
+	child.Stdout = os.Stdout
+	child.Stderr = os.Stderr
+	if err := child.Run(); err != nil {
+		return fmt.Errorf("running child: %w", err)
+	}
+	return nil
+}
+
 func main() {
 	fmt.Println("Init process")
 	if err := setupCerts(); err != nil {
 		fmt.Printf("setting up certificates: %v\n", err)
 	}
 
-	time.Sleep(86400 * time.Second)
+	args := os.Args
+	if args[1] != "--" {
+		log.Fatalln("invalid argument passing")
+	}
+	// run the child process
+	cmd := args[2:]
+	if err := runChild(cmd); err != nil {
+		fmt.Printf("error running child process: %v", err)
+	}
 }

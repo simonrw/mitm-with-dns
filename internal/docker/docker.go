@@ -72,7 +72,6 @@ func (c dockerClient) buildImage(ctx context.Context, name, base string) error {
 	RUN mkdir -p /customcerts/ca
 	COPY *.pem /customcerts/
 	COPY ca/*.pem /customcerts/ca/
-	ENTRYPOINT ["/init"]
 	`, base)
 
 	contextDir, err := os.MkdirTemp("", "dockerbuild-*")
@@ -154,7 +153,8 @@ func (c dockerClient) runContainer(ctx context.Context, image, name string, stop
 		DNS: is,
 	}
 	res, err := c.cli.ContainerCreate(ctx, &container.Config{
-		Image: image,
+		Image:      image,
+		Entrypoint: []string{"/init", "--"},
 	}, hostCfg, nil, nil, name)
 	if err != nil {
 		logger.Fatal().Err(err).Msg("could not create container")
