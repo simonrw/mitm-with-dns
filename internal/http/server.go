@@ -40,12 +40,16 @@ func RunServer(ready *sync.WaitGroup, stop chan struct{}, finished *sync.WaitGro
 	}
 	go func() {
 		if err := httpServer.ListenAndServe(); err != nil {
-			logger.Warn().Err(err).Msg("failed to start HTTP listener")
+			if err != http.ErrServerClosed {
+				logger.Warn().Err(err).Msg("failed to start HTTP listener")
+			}
 		}
 	}()
 	go func() {
 		if err := httpsServer.ListenAndServeTLS("./_wildcard.amazonaws.com.pem", "./_wildcard.amazonaws.com-key.pem"); err != nil {
-			logger.Warn().Err(err).Msg("failed to start HTTPS listener")
+			if err != http.ErrServerClosed {
+				logger.Warn().Err(err).Msg("failed to start HTTPS listener")
+			}
 		}
 	}()
 	defer httpServer.Shutdown(context.TODO())

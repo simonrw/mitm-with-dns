@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -20,10 +21,36 @@ func splitLines(s string) []string {
 	return lines
 }
 
+func isFile(path string) bool {
+	s, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return !s.IsDir()
+}
+
+var cannotFindCertFilename = errors.New("cannot find certificate bundle")
+
+// findCertFilename searches the filesystem for common paths to the certificate
+// bundle. If it cannot find one, it returns an error.
+func findCertFilename() (string, error) {
+	candidates := []string{
+		"/etc/ssl/certs/ca-certificates.crt",
+		"/etc/ssl/certs/ca-bundle.crt",
+	}
+	for _, c := range candidates {
+		if isFile(c) {
+			return c, nil
+		}
+	}
+
+	return "", cannotFindCertFilename
+}
+
 func setupCerts() error {
 	// copy the ca certificate
-	// TODO: non-platform specific
-	certs, err := ioutil.ReadFile("/etc/ssl/certs/ca-certificates.crt")
+	certFilename, err := findCertFilename()
+	certs, err := ioutil.ReadFile(certFilename)
 	if err != nil {
 		return fmt.Errorf("reading existing certs: %w", err)
 	}
@@ -44,7 +71,7 @@ func setupCerts() error {
 	}
 
 	// clobber output file
-	f, err := os.Create("/etc/ssl/certs/ca-certificates.crt")
+	f, err := os.Create(certFilename)
 	if err != nil {
 		return fmt.Errorf("creating certificate file %w", err)
 	}

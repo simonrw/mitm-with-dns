@@ -174,6 +174,12 @@ func (c dockerClient) runContainer(ctx context.Context, image, name string, stop
 	statusCh, errCh := c.cli.ContainerWait(ctx, res.ID, container.WaitConditionNotRunning)
 	select {
 	case <-stop:
+		out, err := c.cli.ContainerLogs(ctx, res.ID, types.ContainerLogsOptions{ShowStdout: true})
+		if err != nil {
+			logger.Warn().Err(err).Msg("could not get container logs")
+		} else {
+			stdcopy.StdCopy(os.Stdout, os.Stderr, out)
+		}
 		containerRemove()
 		return nil
 	case err := <-errCh:
@@ -182,15 +188,15 @@ func (c dockerClient) runContainer(ctx context.Context, image, name string, stop
 			logger.Fatal().Err(err).Msg("error running container")
 		}
 	case <-statusCh:
+		out, err := c.cli.ContainerLogs(ctx, res.ID, types.ContainerLogsOptions{ShowStdout: true})
+		if err != nil {
+			logger.Warn().Err(err).Msg("could not get container logs")
+		} else {
+			stdcopy.StdCopy(os.Stdout, os.Stderr, out)
+		}
 		containerRemove()
 	}
 
-	out, err := c.cli.ContainerLogs(ctx, res.ID, types.ContainerLogsOptions{ShowStdout: true})
-	if err != nil {
-		logger.Fatal().Err(err).Msg("could not get container logs")
-	}
-
-	stdcopy.StdCopy(os.Stdout, os.Stderr, out)
 	logger.Info().Msg("container run complete")
 	return nil
 }
@@ -224,7 +230,5 @@ func Run(baseName string, ipAddresses []net.IP, stop chan struct{}, complete *sy
 		logger.Fatal().Err(err).Msg("running container")
 	}
 
-	logger.Info().Msg("waiting for shutdown signal")
-	<-stop
-	logger.Info().Msg("shutting down docker container")
+	logger.Info().Msg("docker process finished")
 }

@@ -96,7 +96,7 @@ func main() {
 
 	<-sig
 	logger.Info().Msg("shutting down goroutines")
-	for i := 0; i < 4; i++ {
+	for i := 0; i < 8; i++ {
 		stop <- struct{}{}
 	}
 
