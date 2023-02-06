@@ -83,18 +83,11 @@ func setupCerts() error {
 	return nil
 }
 
-func run() error {
+func main() {
 	fmt.Println("Init process")
 	if err := setupCerts(); err != nil {
-		return fmt.Errorf("setting up certificates: %w", err)
+		fmt.Fprintf(os.Stderr, "setting up certificates: %v", err)
 	}
 
 	time.Sleep(86400 * time.Second)
-	return nil
-}
-
-func main() {
-	if err := run(); err != nil {
-		panic(err)
-	}
 }

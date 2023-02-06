@@ -174,7 +174,7 @@ func (c dockerClient) runContainer(ctx context.Context, image, name string, stop
 	statusCh, errCh := c.cli.ContainerWait(ctx, res.ID, container.WaitConditionNotRunning)
 	select {
 	case <-stop:
-		out, err := c.cli.ContainerLogs(ctx, res.ID, types.ContainerLogsOptions{ShowStdout: true})
+		out, err := c.cli.ContainerLogs(ctx, res.ID, types.ContainerLogsOptions{ShowStdout: true, ShowStderr: true})
 		if err != nil {
 			logger.Warn().Err(err).Msg("could not get container logs")
 		} else {
