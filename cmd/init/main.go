@@ -48,18 +48,18 @@ func findCertFilename() (string, error) {
 	return "", cannotFindCertFilename
 }
 
-func setupCerts() error {
+func setupCerts() (string, error) {
 	// copy the ca certificate
 	certFilename, err := findCertFilename()
 	certs, err := ioutil.ReadFile(certFilename)
 	if err != nil {
-		return fmt.Errorf("reading existing certs: %w", err)
+		return "", fmt.Errorf("reading existing certs: %w", err)
 	}
 	certLines := splitLines(string(certs))
 
 	rootCa, err := ioutil.ReadFile("/customcerts/ca/rootCA.pem")
 	if err != nil {
-		return fmt.Errorf("reading mitm cert: %w", err)
+		return "", fmt.Errorf("reading mitm cert: %w", err)
 	}
 	caLines := splitLines(string(rootCa))
 
@@ -74,20 +74,23 @@ func setupCerts() error {
 	// clobber output file
 	f, err := os.Create(certFilename)
 	if err != nil {
-		return fmt.Errorf("creating certificate file %w", err)
+		return "", fmt.Errorf("creating certificate file %w", err)
 	}
 	if _, err := f.WriteString(strings.Join(allLines, "\n")); err != nil {
-		return fmt.Errorf("writing certificate contents: %w", err)
+		return "", fmt.Errorf("writing certificate contents: %w", err)
 	}
 	fmt.Println("certificates updated")
 
-	return nil
+	return certFilename, nil
 }
 
-func runChild(cmd []string) error {
+func runChild(cmd []string, caPath string) error {
 	child := exec.Command(cmd[0], cmd[1:]...)
 	child.Stdout = os.Stdout
 	child.Stderr = os.Stderr
+	child.Env = os.Environ()
+	child.Env = append(child.Env, fmt.Sprintf("AWS_CA_BUNDLE=%s", caPath))
+
 	if err := child.Run(); err != nil {
 		return fmt.Errorf("running child: %w", err)
 	}
@@ -96,7 +99,8 @@ func runChild(cmd []string) error {
 
 func main() {
 	fmt.Println("Init process")
-	if err := setupCerts(); err != nil {
+	caBundlePath, err := setupCerts()
+	if err != nil {
 		fmt.Printf("setting up certificates: %v\n", err)
 	}
 
@@ -106,7 +110,7 @@ func main() {
 	}
 	// run the child process
 	cmd := args[2:]
-	if err := runChild(cmd); err != nil {
+	if err := runChild(cmd, caBundlePath); err != nil {
 		fmt.Printf("error running child process: %v", err)
 	}
 }
