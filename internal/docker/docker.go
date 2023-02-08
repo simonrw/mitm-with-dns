@@ -63,6 +63,20 @@ func copyFiles(srcs, dsts []string) error {
 	return nil
 }
 
+func (c dockerClient) buildNewCommand(ctx context.Context, image string) ([]string, error) {
+
+	res, _, err := c.cli.ImageInspectWithRaw(ctx, image)
+	if err != nil {
+		return nil, fmt.Errorf("inspecting image %s: %w", image, err)
+	}
+
+	cfg := res.ContainerConfig
+	oldEntrypoint := cfg.Entrypoint
+	oldCmd := cfg.Cmd
+
+	return append(oldEntrypoint, oldCmd...), nil
+}
+
 func (c dockerClient) buildImage(ctx context.Context, name, base string) error {
 	logger.Debug().Str("name", name).Str("base", base).Msg("building image")
 	dockerfileContents := fmt.Sprintf(`
