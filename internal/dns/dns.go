@@ -32,6 +32,16 @@ func isExternalRequest(name string) bool {
 }
 
 func (h *dnsHandler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
+	remoteAddress := w.RemoteAddr()
+	switch addr := remoteAddress.(type) {
+	case *net.UDPAddr:
+		logger.Debug().Any("remote address", addr.IP.To4()).Msg("got dns request")
+	default:
+		logger.Warn().Msg("unhandled remote address")
+		dns.HandleFailed(w, r)
+		return
+	}
+
 	m := new(dns.Msg)
 	m.SetReply(r)
 	m.Id = r.Id
