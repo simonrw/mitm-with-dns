@@ -2,6 +2,7 @@ package dns
 
 import (
 	"net"
+	"strings"
 	"sync"
 
 	"github.com/miekg/dns"
@@ -19,6 +20,17 @@ type dnsHandler struct {
 	ipAddresses []net.IP
 }
 
+func isInternalRequest(name string) bool {
+	strippedName := strings.TrimRight(name, ".")
+	isAWS := strings.HasSuffix(strippedName, "amazonaws.com")
+	isLocal := strippedName == "localhost" || strippedName == "localhost.localstack.cloud"
+	return isAWS || isLocal
+}
+
+func isExternalRequest(name string) bool {
+	return !isInternalRequest(name)
+}
+
 func (h *dnsHandler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	m := new(dns.Msg)
 	m.SetReply(r)
@@ -27,6 +39,20 @@ func (h *dnsHandler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	switch q.Qtype {
 	case dns.TypeA:
 		logger.Info().Msg("got A record query type")
+
+		// if not a request that we care about, send to upstream
+		if isExternalRequest(q.Name) {
+			m2, err := dns.Exchange(r, "8.8.8.8:53")
+			if err != nil {
+				log.Warn().Msg("sending upstream request")
+				// TODO: deprecated function
+				dns.HandleFailed(w, r)
+				return
+			}
+			w.WriteMsg(m2)
+			return
+		}
+
 		for _, addr := range h.ipAddresses {
 			if addr.IsLoopback() {
 				continue
@@ -77,15 +103,16 @@ func RunServer(ready *sync.WaitGroup, ipAddresses []net.IP, stop chan struct{}, 
 
 	handler := &dnsHandler{ipAddresses}
 
+	addr := "127.0.0.25:5300"
 	server := &dns.Server{
-		Addr:    "0.0.0.0:53",
+		Addr:    addr,
 		Net:     "udp",
 		Handler: handler,
 	}
 	go server.ListenAndServe()
 	defer server.Shutdown()
 
-	logger.Info().Msg("DNS server ready")
+	logger.Info().Str("address", addr).Msg("DNS server ready")
 	ready.Done()
 
 	logger.Info().Msg("waiting for shutdown signal")
