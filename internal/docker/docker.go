@@ -210,6 +210,7 @@ func (c dockerClient) runContainer(ctx context.Context, image, name string, stop
 		} else {
 			stdcopy.StdCopy(os.Stdout, os.Stderr, out)
 		}
+		containerRemove()
 	}
 
 	logger.Info().Msg("container run complete")
@@ -220,7 +221,7 @@ func (c dockerClient) Close() {
 	c.cli.Close()
 }
 
-func Run(baseName string, ipAddresses []net.IP, stop chan struct{}, complete *sync.WaitGroup) {
+func Run(baseName string, ipAddresses []net.IP, stop chan struct{}, complete *sync.WaitGroup, earlyExit chan<- struct{}) {
 	complete.Add(1)
 	defer complete.Done()
 	logger.Info().Msg("running docker container")
@@ -246,4 +247,5 @@ func Run(baseName string, ipAddresses []net.IP, stop chan struct{}, complete *sy
 	}
 
 	logger.Info().Msg("docker process finished")
+	earlyExit <- struct{}{}
 }

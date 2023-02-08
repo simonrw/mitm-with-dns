@@ -75,7 +75,8 @@ func main() {
 
 	logger.Info().Msg("running DNS server in the background")
 
-	stop := make(chan struct{})
+	numGoroutines := 3
+	stop := make(chan struct{}, numGoroutines)
 	var finished sync.WaitGroup
 	ready.Add(1)
 	go dns.RunServer(&ready, ipAddresses, stop, &finished)
@@ -88,21 +89,31 @@ func main() {
 	ready.Wait()
 
 	logger.Info().Msg("running docker container")
-	go docker.Run(*imageNameFlag, ipAddresses, stop, &finished)
+	containerExited := make(chan struct{})
+	go docker.Run(*imageNameFlag, ipAddresses, stop, &finished, containerExited)
 
 	// handle ctrl-c
 	sig := make(chan os.Signal)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 
-	<-sig
-	logger.Info().Msg("shutting down goroutines")
-	for i := 0; i < 3; i++ {
-		stop <- struct{}{}
+	shutdown := func() {
+		logger.Info().Msg("shutting down goroutines")
+		for i := 0; i < numGoroutines; i++ {
+			stop <- struct{}{}
+		}
+	}
+
+	select {
+	case <-sig:
+		logger.Debug().Msg("ctrl-c")
+		shutdown()
+	case <-containerExited:
+		logger.Debug().Msg("container exited early")
+		shutdown()
 	}
 
 	// wait for goroutines to cleanup
 	logger.Info().Msg("waiting for goroutines to shut down")
 	finished.Wait()
 	logger.Info().Msg("ending main goroutine")
-
 }
