@@ -15,15 +15,8 @@ import (
 	"github.com/docker/docker/pkg/archive"
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/docker/docker/pkg/stdcopy"
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
+	"go.uber.org/zap"
 )
-
-var logger zerolog.Logger
-
-func init() {
-	logger = log.With().Str("module", "docker").Logger()
-}
 
 type dockerClient struct {
 	ipAddresses []net.IP
@@ -78,7 +71,7 @@ func (c dockerClient) buildNewCommand(ctx context.Context, image string) ([]stri
 }
 
 func (c dockerClient) buildImage(ctx context.Context, name, base string) error {
-	logger.Debug().Str("name", name).Str("base", base).Msg("building image")
+	logger.Debugw("building image", "name", name, "base", base)
 	dockerfileContents := fmt.Sprintf(`
 	FROM %s
 	COPY init /init
@@ -110,7 +103,7 @@ func (c dockerClient) buildImage(ctx context.Context, name, base string) error {
 		return fmt.Errorf("writing dockerfile contents: %w", err)
 	}
 
-	logger.Debug().Str("filename", file.Name()).Msg("")
+	logger.Debugw("", "filename", file.Name())
 
 	// copy the init binary
 	if err := copyFile("./init", filepath.Join(contextDir, "init")); err != nil {
@@ -141,16 +134,13 @@ func (c dockerClient) buildImage(ctx context.Context, name, base string) error {
 		return fmt.Errorf("creating build context: %w", err)
 	}
 
-	res, err := c.cli.ImageBuild(ctx, buildCtx, types.ImageBuildOptions{
+	_, err = c.cli.ImageBuild(ctx, buildCtx, types.ImageBuildOptions{
 		Tags:       []string{name},
 		Dockerfile: "Dockerfile",
 	})
 	if err != nil {
 		return fmt.Errorf("building image: %w", err)
 	}
-	defer res.Body.Close()
-
-	io.Copy(os.Stdout, res.Body)
 
 	return nil
 }
@@ -171,63 +161,63 @@ func (c dockerClient) runContainer(ctx context.Context, image, name string, stop
 		Entrypoint: []string{"/init", "--"},
 	}, hostCfg, nil, nil, name)
 	if err != nil {
-		logger.Fatal().Err(err).Msg("could not create container")
+		logger.Fatalw("could not create container", "err", err)
 	}
-	logger := logger.With().Str("container-id", res.ID).Logger()
+	logger := logger.With("container-id", res.ID)
 
 	if err := c.cli.ContainerStart(ctx, res.ID, types.ContainerStartOptions{}); err != nil {
-		logger.Fatal().Err(err).Msg("could not start container")
+		logger.Fatalw("could not start container", "err", err)
 	}
-	logger.Debug().Msg("started container")
+	logger.Debug("started container")
 
 	containerRemove := func() {
-		logger.Debug().Msg("stopping container")
+		logger.Debug("stopping container")
 		timeout := 1
 		if err := c.cli.ContainerStop(ctx, res.ID, container.StopOptions{
 			Timeout: &timeout,
 		}); err != nil {
-			logger.Warn().Err(err).Msg("failed to stop container")
+			logger.Warnw("failed to stop container", "err", err)
 		}
 
-		logger.Info().Msg("removing container")
+		logger.Info("removing container")
 		// remove the container
 		if err := c.cli.ContainerRemove(ctx, res.ID, types.ContainerRemoveOptions{Force: true}); err != nil {
-			logger.Warn().Err(err).Msg("failed to remove container")
+			logger.Warnf("failed to remove container", "err", err)
 		}
 	}
 
-	logger.Debug().Msg("waiting for container to finish")
+	logger.Debug("waiting for container to finish")
 	statusCh, errCh := c.cli.ContainerWait(ctx, res.ID, container.WaitConditionNotRunning)
-	logger.Debug().Msg("wait call finished")
+	logger.Debug("wait call finished")
 	select {
 	case <-stop:
-		logger.Debug().Msg("stop command received")
+		logger.Debug("stop command received")
 		out, err := c.cli.ContainerLogs(ctx, res.ID, types.ContainerLogsOptions{ShowStdout: true, ShowStderr: true})
 		if err != nil {
-			logger.Warn().Err(err).Msg("could not get container logs")
+			logger.Warnf("could not get container logs", "err", err)
 		} else {
 			stdcopy.StdCopy(os.Stdout, os.Stderr, out)
 		}
 		containerRemove()
 		return nil
 	case err := <-errCh:
-		logger.Warn().Err(err).Msg("error received from container")
+		logger.Warnf("error received from container", "err", err)
 		if err != nil {
 			containerRemove()
-			logger.Fatal().Err(err).Msg("error running container")
+			logger.Fatalw("error running container", "err", err)
 		}
 	case <-statusCh:
-		logger.Debug().Msg("conatiner stopped by itself")
+		logger.Debug("conatiner stopped by itself")
 		out, err := c.cli.ContainerLogs(ctx, res.ID, types.ContainerLogsOptions{ShowStdout: true})
 		if err != nil {
-			logger.Warn().Err(err).Msg("could not get container logs")
+			logger.Warnf("could not get container logs", "err", err)
 		} else {
 			stdcopy.StdCopy(os.Stdout, os.Stderr, out)
 		}
 		containerRemove()
 	}
 
-	logger.Info().Msg("container run complete")
+	logger.Info("container run complete")
 	return nil
 }
 
@@ -235,15 +225,18 @@ func (c dockerClient) Close() {
 	c.cli.Close()
 }
 
-func Run(baseName string, ipAddresses []net.IP, stop chan struct{}, complete *sync.WaitGroup, earlyExit chan<- struct{}) {
+var logger *zap.SugaredLogger
+
+func Run(l *zap.SugaredLogger, baseName string, ipAddresses []net.IP, stop chan struct{}, complete *sync.WaitGroup, earlyExit chan<- struct{}) {
+	logger = l
 	complete.Add(1)
 	defer complete.Done()
-	logger.Info().Msg("running docker container")
+	logger.Info("running docker container")
 
 	ctx := context.Background()
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
-		logger.Fatal().Err(err).Msg("could not create docker client")
+		logger.Fatalw("could not create docker client", "err", err)
 	}
 	client := dockerClient{
 		ipAddresses: ipAddresses,
@@ -254,12 +247,12 @@ func Run(baseName string, ipAddresses []net.IP, stop chan struct{}, complete *sy
 	imageName := "foo"
 	containerName := "container"
 	if err := client.buildImage(ctx, imageName, baseName); err != nil {
-		logger.Fatal().Err(err).Msg("building image")
+		logger.Fatalf("building image", "err", err)
 	}
 	if err := client.runContainer(ctx, imageName, containerName, stop); err != nil {
-		logger.Fatal().Err(err).Msg("running container")
+		logger.Fatalw("running container", "err", err)
 	}
 
-	logger.Info().Msg("docker process finished")
+	logger.Info("docker process finished")
 	earlyExit <- struct{}{}
 }

@@ -6,14 +6,16 @@ import (
 	"sync"
 
 	"github.com/miekg/dns"
-	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"go.uber.org/zap"
 )
 
-var logger zerolog.Logger
+var logger *zap.SugaredLogger
 
 func init() {
-	logger = log.With().Str("module", "dns").Logger()
+	rawLogger := zap.Must(zap.NewDevelopment())
+	logger = rawLogger.Sugar()
+	defer logger.Sync()
 }
 
 type dnsHandler struct {
@@ -35,9 +37,9 @@ func (h *dnsHandler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	remoteAddress := w.RemoteAddr()
 	switch addr := remoteAddress.(type) {
 	case *net.UDPAddr:
-		logger.Debug().Any("remote address", addr.IP.To4()).Msg("got dns request")
+		logger.Debugw("got dns requet", "remote address", addr.IP.To4())
 	default:
-		logger.Warn().Msg("unhandled remote address")
+		logger.Warn("unhandled remote address")
 		dns.HandleFailed(w, r)
 		return
 	}
@@ -48,7 +50,7 @@ func (h *dnsHandler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	q := r.Question[0]
 	switch q.Qtype {
 	case dns.TypeA:
-		logger.Info().Msg("got A record query type")
+		logger.Info("got A record query type")
 
 		// if not a request that we care about, send to upstream
 		if isExternalRequest(q.Name) {
@@ -78,10 +80,10 @@ func (h *dnsHandler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 			}
 			m.Answer = append(m.Answer, rr)
 		}
-		logger.Info().Any("response", m).Msg("returning response")
+		logger.Infow("returning response", "response", m)
 		w.WriteMsg(m)
 	case dns.TypeAAAA:
-		logger.Info().Msg("got AAAA record query type")
+		logger.Info("got AAAA record query type")
 		for _, addr := range h.ipAddresses {
 			if addr.IsLoopback() {
 				continue
@@ -96,20 +98,22 @@ func (h *dnsHandler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 				AAAA: addr,
 			}
 			m.Answer = append(m.Answer, rr)
-			logger.Info().Any("response", m).Msg("returning response")
+			logger.Infow("returning response", "response", m)
 			w.WriteMsg(m)
 		}
 	default:
-		log.Warn().Uint16("qtype", r.Question[0].Qtype).Msg("unhandled query type")
+		logger.Warnw("unhandled query type", "qtype", r.Question[0].Qtype)
 	}
 
 	// return error
 }
 
-func RunServer(ready *sync.WaitGroup, ipAddresses []net.IP, stop chan struct{}, complete *sync.WaitGroup) {
+func RunServer(l *zap.SugaredLogger, ready *sync.WaitGroup, ipAddresses []net.IP, stop chan struct{}, complete *sync.WaitGroup) {
+	logger = l
+
 	complete.Add(1)
 	defer complete.Done()
-	logger.Info().Msg("running DNS server")
+	logger.Info("running DNS server")
 
 	handler := &dnsHandler{ipAddresses}
 
@@ -122,10 +126,10 @@ func RunServer(ready *sync.WaitGroup, ipAddresses []net.IP, stop chan struct{}, 
 	go server.ListenAndServe()
 	defer server.Shutdown()
 
-	logger.Info().Str("address", addr).Msg("DNS server ready")
+	logger.Infow("DNS server ready", "address", addr)
 	ready.Done()
 
-	logger.Info().Msg("waiting for shutdown signal")
+	logger.Info("waiting for shutdown signal")
 	<-stop
-	logger.Info().Msg("shutdown signal received")
+	logger.Info("shutdown signal received")
 }

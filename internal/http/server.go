@@ -6,28 +6,24 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
+	"go.uber.org/zap"
 )
 
-var logger zerolog.Logger
-
-func init() {
-	logger = log.With().Str("module", "http").Logger()
-}
+var logger *zap.SugaredLogger
 
 func createRouter() *http.ServeMux {
 	router := http.NewServeMux()
 	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		logger := logger.With().Str("path", r.URL.Path).Logger()
-		logger.Debug().Msg("got request")
+		logger := logger.With("path", r.URL.Path)
+		logger.Debug("got request")
 		fmt.Fprintf(w, "ok")
 	})
 	return router
 }
 
-func RunServer(ready *sync.WaitGroup, stop chan struct{}, finished *sync.WaitGroup) {
-	logger.Info().Msg("running HTTP server")
+func RunServer(l *zap.SugaredLogger, ready *sync.WaitGroup, stop chan struct{}, finished *sync.WaitGroup) {
+	logger = l
+	logger.Info("running HTTP server")
 	finished.Add(1)
 	defer finished.Done()
 
@@ -43,22 +39,22 @@ func RunServer(ready *sync.WaitGroup, stop chan struct{}, finished *sync.WaitGro
 	go func() {
 		if err := httpServer.ListenAndServe(); err != nil {
 			if err != http.ErrServerClosed {
-				logger.Warn().Err(err).Msg("failed to start HTTP listener")
+				logger.Warnf("failed to start http listener", "err", err)
 			}
 		}
 	}()
 	go func() {
 		if err := httpsServer.ListenAndServeTLS("./_wildcard.amazonaws.com+1.pem", "./_wildcard.amazonaws.com+1-key.pem"); err != nil {
 			if err != http.ErrServerClosed {
-				logger.Warn().Err(err).Msg("failed to start HTTPS listener")
+				logger.Warnf("failed to start https listener", "err", err)
 			}
 		}
 	}()
 	defer httpServer.Shutdown(context.TODO())
 
-	logger.Info().Msg("http server running")
+	logger.Info("http server running")
 	ready.Done()
 
 	<-stop
-	logger.Info().Msg("http server closed")
+	logger.Info("http server closed")
 }
