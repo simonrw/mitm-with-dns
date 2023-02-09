@@ -37,10 +37,10 @@ func (h *dnsHandler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	remoteAddress := w.RemoteAddr()
 	switch addr := remoteAddress.(type) {
 	case *net.UDPAddr:
-		logger.Debugw("got dns requet", "remote address", addr.IP.To4())
+		logger.Debugw("got dns request", "remote address", addr.IP.To4())
 	default:
 		logger.Warn("unhandled remote address")
-		dns.HandleFailed(w, r)
+		handleRefused(w, r)
 		return
 	}
 
@@ -50,7 +50,9 @@ func (h *dnsHandler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	q := r.Question[0]
 	switch q.Qtype {
 	case dns.TypeA:
-		logger.Info("got A record query type")
+		fallthrough
+	case dns.TypeAAAA:
+		logger.Info("got A/AAAA record query type")
 
 		// if not a request that we care about, send to upstream
 		if isExternalRequest(q.Name) {
@@ -58,7 +60,7 @@ func (h *dnsHandler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 			if err != nil {
 				log.Warn().Msg("sending upstream request")
 				// TODO: deprecated function
-				dns.HandleFailed(w, r)
+				handleRefused(w, r)
 				return
 			}
 			w.WriteMsg(m2)
@@ -72,7 +74,7 @@ func (h *dnsHandler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 			rr := &dns.A{
 				Hdr: dns.RR_Header{
 					Name:   q.Name,
-					Rrtype: dns.TypeA,
+					Rrtype: q.Qtype,
 					Class:  dns.ClassINET,
 					Ttl:    1500,
 				},
@@ -82,30 +84,17 @@ func (h *dnsHandler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 		}
 		logger.Infow("returning response", "response", m)
 		w.WriteMsg(m)
-	case dns.TypeAAAA:
-		logger.Info("got AAAA record query type")
-		for _, addr := range h.ipAddresses {
-			if addr.IsLoopback() {
-				continue
-			}
-			rr := &dns.AAAA{
-				Hdr: dns.RR_Header{
-					Name:   q.Name,
-					Rrtype: dns.TypeAAAA,
-					Class:  dns.ClassINET,
-					Ttl:    1500,
-				},
-				AAAA: addr,
-			}
-			m.Answer = append(m.Answer, rr)
-			logger.Infow("returning response", "response", m)
-			w.WriteMsg(m)
-		}
 	default:
 		logger.Warnw("unhandled query type", "qtype", r.Question[0].Qtype)
+		handleRefused(w, r)
 	}
 
-	// return error
+}
+
+func handleRefused(w dns.ResponseWriter, r *dns.Msg) {
+	m := new(dns.Msg)
+	m.SetRcode(r, dns.RcodeRefused)
+	w.WriteMsg(m)
 }
 
 func RunServer(l *zap.SugaredLogger, ready *sync.WaitGroup, ipAddresses []net.IP, stop chan struct{}, complete *sync.WaitGroup) {
@@ -117,7 +106,7 @@ func RunServer(l *zap.SugaredLogger, ready *sync.WaitGroup, ipAddresses []net.IP
 
 	handler := &dnsHandler{ipAddresses}
 
-	addr := "127.0.0.25:5300"
+	addr := "0.0.0.0:53"
 	server := &dns.Server{
 		Addr:    addr,
 		Net:     "udp",

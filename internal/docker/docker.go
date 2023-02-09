@@ -77,8 +77,7 @@ func (c dockerClient) buildImage(ctx context.Context, name, base string) error {
 	COPY init /init
 	RUN chmod +x /init
 	RUN mkdir -p /customcerts/ca
-	COPY *.pem /customcerts/
-	COPY ca/*.pem /customcerts/ca/
+	COPY ca/rootCA.pem /customcerts/ca/
 	`, base)
 
 	contextDir, err := os.MkdirTemp("", "dockerbuild-*")
@@ -159,6 +158,7 @@ func (c dockerClient) runContainer(ctx context.Context, image, name string, stop
 	res, err := c.cli.ContainerCreate(ctx, &container.Config{
 		Image:      image,
 		Entrypoint: []string{"/init", "--"},
+		Cmd:        []string{"sleep", "86400"},
 	}, hostCfg, nil, nil, name)
 	if err != nil {
 		logger.Fatalw("could not create container", "err", err)
